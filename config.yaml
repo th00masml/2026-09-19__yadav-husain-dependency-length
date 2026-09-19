@@ -89,7 +89,23 @@ preprocessing:
   max_rejection_rate_warn: 0.15
 
 filters:
-  min_sentences: 5000     # after validation
+  # Minimum analyzable sentences, after validation.
+  #
+  # Was 5000, which was never justified and cost the sample its typological
+  # spread: Chinese, Turkish, Persian, Indonesian, Greek and Irish were all
+  # excluded at 3.4k-4.8k sentences, leaving 10 of 17 treebanks Indo-European.
+  #
+  # Calibrated instead against the width of the H2 bootstrap CI. On en_ewt the
+  # half-width of the magnitude contrast against its effect size runs:
+  #
+  #     n=400  -> 6.2x     n=2000 -> 13.4x    n=5000  -> 19.6x
+  #     n=1000 -> 9.0x     n=3000 -> 14.4x    n=11108 -> 26.3x
+  #
+  # The effect is resolved many times over well below 5000. 1500 keeps the
+  # ratio near 10x while admitting every treebank above ~1.5k sentences, and
+  # per-treebank CIs are reported regardless so a small treebank's uncertainty
+  # is visible rather than hidden behind an exclusion.
+  min_sentences: 1500
   nonprojective_report_threshold: 0.20   # flag for separate reporting, not exclusion
 
 download:

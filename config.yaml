@@ -78,9 +78,16 @@ treebanks:
   - {id: de_gsd,      repo: UD_German-GSD,         train: de_gsd-ud-train.conllu,      family: Indo-European, order: SVO}
   - {id: fr_gsd,      repo: UD_French-GSD,         train: fr_gsd-ud-train.conllu,      family: Indo-European, order: SVO}
   - {id: es_ancora,   repo: UD_Spanish-AnCora,     train: es_ancora-ud-train.conllu,   family: Indo-European, order: SVO}
-  - {id: ru_syntagrus, repo: UD_Russian-SynTagRus, train: ru_syntagrus-ud-train.conllu, family: Indo-European, order: SVO}
+  # SynTagRus ships train as three shards; train_parts are concatenated.
+  - {id: ru_syntagrus, repo: UD_Russian-SynTagRus, train: ru_syntagrus-ud-train.conllu, family: Indo-European, order: SVO,
+     train_parts: [ru_syntagrus-ud-train-a.conllu, ru_syntagrus-ud-train-b.conllu, ru_syntagrus-ud-train-c.conllu]}
   - {id: pl_pdb,      repo: UD_Polish-PDB,         train: pl_pdb-ud-train.conllu,      family: Indo-European, order: SVO}
-  - {id: cs_pdt,      repo: UD_Czech-PDT,          train: cs_pdt-ud-train.conllu,      family: Indo-European, order: SVO}
+  # PDT was renamed to PDT-C upstream and ships train as eleven shards.
+  - {id: cs_pdt,      repo: UD_Czech-PDT,          train: cs_pdt-ud-train.conllu,      family: Indo-European, order: SVO,
+     train_parts: [cs_pdtc-ud-train-ca.conllu, cs_pdtc-ud-train-ct.conllu, cs_pdtc-ud-train-ft.conllu,
+                   cs_pdtc-ud-train-la.conllu, cs_pdtc-ud-train-lt.conllu, cs_pdtc-ud-train-ma.conllu,
+                   cs_pdtc-ud-train-mt.conllu, cs_pdtc-ud-train-st.conllu, cs_pdtc-ud-train-va.conllu,
+                   cs_pdtc-ud-train-wt0.conllu, cs_pdtc-ud-train-wt1.conllu, cs_pdtc-ud-train-wt2.conllu]}
   - {id: it_isdt,     repo: UD_Italian-ISDT,       train: it_isdt-ud-train.conllu,     family: Indo-European, order: SVO}
   - {id: pt_bosque,   repo: UD_Portuguese-Bosque,  train: pt_bosque-ud-train.conllu,   family: Indo-European, order: SVO}
   - {id: hi_hdtb,     repo: UD_Hindi-HDTB,         train: hi_hdtb-ud-train.conllu,     family: Indo-European, order: SOV}
@@ -96,7 +103,10 @@ treebanks:
   - {id: ug_udt,      repo: UD_Uyghur-UDT,         train: ug_udt-ud-train.conllu,      family: Turkic,        order: SOV}
   - {id: ar_padt,     repo: UD_Arabic-PADT,        train: ar_padt-ud-train.conllu,     family: Afro-Asiatic,  order: VSO}
   - {id: he_htb,      repo: UD_Hebrew-HTB,         train: he_htb-ud-train.conllu,      family: Afro-Asiatic,  order: SVO}
-  - {id: am_att,      repo: UD_Amharic-ATT,        train: am_att-ud-train.conllu,      family: Afro-Asiatic,  order: SOV}
+  # am_att is TEST-ONLY upstream (no train file exists), so it cannot be used
+  # here without mixing a test split into a training-data analysis. Left in
+  # place, commented, so the omission is visible rather than silent.
+  # - {id: am_att,    repo: UD_Amharic-ATT,        train: am_att-ud-train.conllu,      family: Afro-Asiatic,  order: SOV}
   - {id: zh_gsd,      repo: UD_Chinese-GSD,        train: zh_gsd-ud-train.conllu,      family: Sino-Tibetan,  order: SVO}
   - {id: ja_gsd,      repo: UD_Japanese-GSD,       train: ja_gsd-ud-train.conllu,      family: Japonic,       order: SOV}
   - {id: ko_kaist,    repo: UD_Korean-Kaist,       train: ko_kaist-ud-train.conllu,    family: Koreanic,      order: SOV}

@@ -60,6 +60,77 @@ def _looks_like_conllu(path: Path, min_sentences: int = 5) -> bool:
     return blocks + int(saw_tab_row) >= 1
 
 
+def _fetch_multipart(
+    spec: dict,
+    dest: Path,
+    cfg_download: dict,
+    offline: bool = False,
+) -> Path | None:
+    """Fetch several train shards and concatenate them into `dest`.
+
+    All-or-nothing: if any shard fails, nothing is written. A treebank that is
+    silently short a third of its sentences is worse than one that is absent,
+    because only the second is visible in the manifest.
+    """
+    if offline:
+        log.warning("offline mode and no valid cache for %s -- skipping", spec["id"])
+        return None
+
+    try:
+        import requests
+    except ImportError:
+        log.error("`requests` not installed; cannot download. Install requirements.txt.")
+        return None
+
+    parts = spec["train_parts"]
+    timeout = cfg_download.get("timeout_seconds", 120)
+    retries = cfg_download.get("max_retries", 3)
+    tmp = dest.with_suffix(dest.suffix + ".part")
+
+    log.info("downloading %s (%d parts)", spec["id"], len(parts))
+    complete = False
+    try:
+        # The temp file must be CLOSED before it is unlinked or replaced;
+        # Windows refuses both on an open handle.
+        with open(tmp, "wb") as out:
+            for fname in parts:
+                url = cfg_download["github_raw_template"].format(
+                    repo=spec["repo"], fname=fname)
+                for attempt in range(1, retries + 1):
+                    try:
+                        resp = requests.get(url, timeout=timeout, stream=True)
+                        if resp.status_code != 200:
+                            log.warning("  HTTP %s for %s", resp.status_code, fname)
+                            continue
+                        for chunk in resp.iter_content(chunk_size=1 << 16):
+                            if chunk:
+                                out.write(chunk)
+                        # CoNLL-U sentences are blank-line delimited; guarantee a
+                        # separator so the last sentence of one shard and the
+                        # first of the next never merge into one bad block.
+                        out.write(b"\n\n")
+                        break
+                    except Exception as exc:  # noqa: BLE001 - retry any network error
+                        log.warning("  error fetching %s: %s", fname, exc)
+                else:
+                    log.warning("  %s: part %s unavailable; abandoning treebank",
+                                spec["id"], fname)
+                    break
+            else:
+                complete = True
+
+        if complete and _looks_like_conllu(tmp):
+            tmp.replace(dest)
+            log.info("  ok: %s (%.1f MB from %d parts)",
+                     spec["id"], dest.stat().st_size / 1e6, len(parts))
+            return dest
+        if complete:
+            log.warning("  %s: concatenated parts do not parse as CoNLL-U", spec["id"])
+    finally:
+        tmp.unlink(missing_ok=True)
+    return None
+
+
 def fetch_treebank(
     spec: dict,
     raw_dir: Path,
@@ -70,6 +141,14 @@ def fetch_treebank(
 
     Skips the download entirely if a valid cached copy already exists, which
     makes the whole pipeline resumable after an interrupted run.
+
+    Some treebanks ship their training data as several files rather than one
+    (UD splits anything too large for a comfortable single download -- Russian
+    SynTagRus is three parts, Czech PDT is eleven). A spec may therefore carry
+    `train_parts`, a list of remote filenames that are fetched and concatenated
+    into `train`. CoNLL-U is blank-line delimited, so concatenation with a
+    separating blank line is a valid merge. Without this, those treebanks 404
+    and are silently missing from the typological sample.
     """
     raw_dir = Path(raw_dir)
     raw_dir.mkdir(parents=True, exist_ok=True)
@@ -78,6 +157,9 @@ def fetch_treebank(
     if dest.exists() and _looks_like_conllu(dest):
         log.debug("cached: %s", spec["id"])
         return dest
+
+    if spec.get("train_parts"):
+        return _fetch_multipart(spec, dest, cfg_download, offline=offline)
 
     if offline:
         log.warning("offline mode and no valid cache for %s -- skipping", spec["id"])

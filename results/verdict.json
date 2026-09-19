@@ -1,25 +1,30 @@
 {
   "run": {
     "run_date": "2026-09-19",
-    "timestamp_utc": "2026-09-19T08:31:24.739278+00:00",
+    "timestamp_utc": "2026-09-19T12:17:33.784723+00:00",
     "mode": {
-      "fast": true,
-      "offline": true,
+      "fast": false,
+      "offline": false,
       "fixture": false
     },
     "seed": 20260919,
-    "n_baseline_samples": 5,
-    "n_bootstrap_resamples": 500,
-    "n_treebanks_analyzed": 5,
+    "n_baseline_samples": 20,
+    "n_bootstrap_resamples": 5000,
+    "n_treebanks_analyzed": 26,
     "head_count_scope": "global",
     "python": "3.10.11",
     "platform": "Windows-10-10.0.26200-SP0",
-    "elapsed_seconds": 270.9
+    "elapsed_seconds": 4017.4
   },
   "pre_registered_thresholds": {
     "support_fraction": 0.7,
     "contradict_fraction": 0.3,
-    "h3_shrinkage_min": 0.5,
+    "h3_shrinkage_min": null,
+    "h3_alpha": 0.05,
+    "h2_coprimaries": [
+      "prob_advantage",
+      "median_rel_reduction"
+    ],
     "fdr_q": 0.05,
     "ci_level": 0.95
   },
@@ -30,35 +35,57 @@
       "predicted_direction": "delta < 0 on both metrics",
       "scored_on_baseline": "B1_uniform",
       "baseline_note": "B2_arity_preserving is reported but not scored: it preserves each node's left/right dependent counts, so it often reproduces the real order exactly and cannot detect a DLM effect.",
-      "n_conditions": 5,
-      "n_supporting": 5,
+      "n_conditions": 26,
+      "n_supporting": 26,
       "fraction_supporting": 1.0,
       "verdict": "SUPPORTED",
-      "secondary_B2_n_supporting": 4,
-      "secondary_B2_n_conditions": 5
+      "secondary_B2_n_supporting": 19,
+      "secondary_B2_n_conditions": 26
     },
     "H2": {
       "statement": "The head-based metric shows a larger real-vs-random effect than the word-based metric.",
       "predicted_direction": "|delta_head| - |delta_word| > 0",
-      "n_conditions": 10,
-      "n_supporting": 2,
-      "n_contradicting": 7,
-      "n_equivocal": 1,
-      "fraction_supporting": 0.2,
-      "median_delta_diff": -0.043890155408523784,
-      "verdict": "CONTRADICTED"
+      "n_conditions": 52,
+      "n_supporting": 12,
+      "n_contradicting": 31,
+      "n_equivocal": 9,
+      "fraction_supporting": 0.23076923076923078,
+      "median_delta_diff": -0.03683593023264525,
+      "verdict": "CONTRADICTED",
+      "coprimary_prob_advantage": {
+        "statistic": "P(real shorter) with ties split, head minus word",
+        "n_supporting": 17,
+        "fraction_supporting": 0.3269230769230769,
+        "median_diff": -0.013704932957857408,
+        "verdict": "EQUIVOCAL"
+      },
+      "coprimary_median_relative_reduction": {
+        "statistic": "median per-sentence (base-real)/base, head minus word",
+        "n_supporting": 44,
+        "fraction_supporting": 0.8461538461538461,
+        "median_diff": 0.10915181204993188,
+        "verdict": "SUPPORTED"
+      },
+      "coprimaries_agree_n": 15,
+      "median_tie_rate_word": 0.0033350680469475956,
+      "median_tie_rate_head": 0.04318522615946649
     },
     "H3": {
       "statement": "Word-based dependency length is derivative of head-based dependency length.",
-      "predicted_direction": ">=50% shrinkage in |beta(word_DL)| when head_DL is added, with beta(head_DL) significant",
-      "n_conditions": 10,
-      "n_supporting": 3,
-      "fraction_supporting": 0.3,
-      "median_shrinkage": 0.23827342094914605,
-      "median_beta_word_reduced": -4.295772581917003,
-      "median_beta_word_full": -3.8526806974312473,
-      "median_beta_head_full": -1.2398118567728864,
-      "verdict": "EQUIVOCAL"
+      "model": "conditional_logit_on_matched_pairs",
+      "predicted_direction": "beta(word_DL) indistinguishable from zero once head_DL is in the model, with beta(head_DL) significant and the nested LR test passing FDR",
+      "statistic_note": "Scored on whether word_DL retains an independent effect, NOT on shrinkage in |beta(word_DL)|. Logistic coefficients are not collapsible, so a between-model beta comparison measures rescaling rather than derivativeness.",
+      "n_conditions": 52,
+      "n_supporting": 2,
+      "fraction_supporting": 0.038461538461538464,
+      "median_beta_word_reduced": -7.239506445670797,
+      "median_beta_word_full": -8.74013502528236,
+      "median_beta_head_full": -0.17159883979551047,
+      "median_delta_auc": 0.03595781469661674,
+      "n_beta_head_wrong_sign": 25,
+      "max_within_pair_vif": 41.426202089782194,
+      "collinearity_note": "word_DL and head_DL differences correlate 0.95-0.98 within pairs. The LR test and delta_AUC are the interpretable quantities; individual betas are fragile under this VIF.",
+      "verdict": "CONTRADICTED"
     }
   }
 }

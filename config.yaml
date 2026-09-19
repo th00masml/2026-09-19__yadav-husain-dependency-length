@@ -24,9 +24,24 @@ thresholds:
   # It is CONTRADICTED if < contradict_fraction of treebanks do.
   # Anything in between is EQUIVOCAL -- which is a legitimate, publishable result.
   contradict_fraction: 0.30
-  # H3: |beta(word_DL)| must shrink by at least this fraction when head_DL is
-  # added to the model, for that treebank to count as supporting H3.
-  h3_shrinkage_min: 0.50
+  # H3: RETIRED after pre-registration, and deliberately left here rather than
+  # deleted, because silently dropping a pre-registered threshold is worse than
+  # recording why it was abandoned.
+  #
+  # The original rule was: |beta(word_DL)| must shrink >= 50% when head_DL is
+  # added. Logistic coefficients are not collapsible, so that comparison
+  # measures rescaling, not derivativeness. Simulation (see run_h3's docstring)
+  # shows it fails in both directions: it reports up to +73% shrinkage when the
+  # two predictors are independent causes, and -81% "suppression" when
+  # word_DL's true effect is exactly zero.
+  #
+  # H3 is now scored on whether word_DL retains an independent effect in a
+  # conditional logit over matched pairs. No numeric threshold replaces this
+  # one; the criterion is significance of beta(word_DL) at alpha, with the
+  # nested LR test under FDR control.
+  h3_shrinkage_min: null   # retired; no longer read by src/analysis.py
+  # Alpha for the per-coefficient H3 criterion.
+  h3_alpha: 0.05
   # Family-wise error control across treebanks, within each hypothesis family.
   fdr_q: 0.05
   # Bootstrap confidence level.

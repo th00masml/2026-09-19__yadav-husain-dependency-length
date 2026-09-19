@@ -22,6 +22,20 @@ tidied away.
 
 ---
 
+## Write-up
+
+`paper/dlm_baseline_difficulty.md` is a draft write-up of what this repository
+found, aimed at readers who compute dependency length rather than at readers of
+this codebase. It argues the general result (baseline difficulty controls the
+direction of the comparison) with Yadav & Husain as the test case, and reports
+the two statistics that produced their own results, including one of our own
+mis-specified predictions.
+
+**It is a draft and has not been submitted anywhere.** Every number in it is
+checked against the committed results.
+
+---
+
 ## Paper under test
 
 > Yadav, H., & Husain, S. (2022). *A Reappraisal of Dependency Length
@@ -364,7 +378,7 @@ wrong is recorded in "The H2 co-primaries" above.
 
 Cliff's δ counts the *sign* of each within-pair difference and ignores its
 magnitude. head_DL is the coarser metric and ties far more often than word_DL
-(median 4.3% vs 0.2% under B1 on the full run).
+(median 4.25% vs 0.21% under B1 on the full run).
 
 The `--fast` run inferred from this that δ *structurally penalizes* the coarser
 metric, and proposed a tie-splitting statistic as the fix. **The full run showed

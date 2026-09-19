@@ -1,0 +1,409 @@
+# ============================================================================
+# mini.conllu -- hand-verified fixture for the dependency-length pipeline.
+#
+# Purpose: make the entire test suite and a full `python main.py --fixture`
+# run work with ZERO network access. Several sentences are constructed to
+# exercise exactly the cases that silently corrupt DL code:
+#   * multiword token ranges (1-2)
+#   * empty nodes (3.1)
+#   * non-projective arcs
+#   * trees that must be REJECTED (cycle, two roots, out-of-range head)
+#
+# DL values for the sentences marked "HAND-VERIFIED" are worked out in the
+# comment above each one, using 0-based indices after MWT/empty-node removal.
+# ============================================================================
+
+# --- English -----------------------------------------------------------------
+# HAND-VERIFIED  s-en-1  "the dog chased the cat"
+# 0-based: 0 the, 1 dog, 2 chased, 3 the, 4 cat
+# heads:   0->1, 1->2, 2->ROOT, 3->4, 4->2
+# word_dl: |1-0|=1, |2-1|=1, |4-3|=1, |2-4|=2          -> sum 5
+# is_head (global): 1 (heads 0), 2 (heads 1,4), 4 (heads 3)  -> {1,2,4}
+# head_dl per arc (strictly inside span):
+#   (1,0) span(0,1) inside {}      -> 0
+#   (2,1) span(1,2) inside {}      -> 0
+#   (4,3) span(3,4) inside {}      -> 0
+#   (2,4) span(2,4) inside {3}     -> 3 is not a head -> 0
+# head_dl sum = 0
+# sent_id = s-en-1
+# text = the dog chased the cat
+1	the	the	DET	DT	_	2	det	_	_
+2	dog	dog	NOUN	NN	_	3	nsubj	_	_
+3	chased	chase	VERB	VBD	_	0	root	_	_
+4	the	the	DET	DT	_	5	det	_	_
+5	cat	cat	NOUN	NN	_	3	obj	_	_
+
+# HAND-VERIFIED  s-en-2  "a very old man slept"
+# 0-based: 0 a, 1 very, 2 old, 3 man, 4 slept
+# heads:   0->3, 1->2, 2->3, 3->4, 4->ROOT
+# word_dl: |3-0|=3, |2-1|=1, |3-2|=1, |4-3|=1          -> sum 6
+# is_head (global): {2 (heads 1), 3 (heads 0,2), 4 (heads 3)}
+# head_dl:
+#   (3,0) span(0,3) inside {1,2}: 1 no, 2 yes          -> 1
+#   (2,1) span(1,2) inside {}                          -> 0
+#   (3,2) span(2,3) inside {}                          -> 0
+#   (4,3) span(3,4) inside {}                          -> 0
+# head_dl sum = 1
+# sent_id = s-en-2
+# text = a very old man slept
+1	a	a	DET	DT	_	4	det	_	_
+2	very	very	ADV	RB	_	3	advmod	_	_
+3	old	old	ADJ	JJ	_	4	amod	_	_
+4	man	man	NOUN	NN	_	5	nsubj	_	_
+5	slept	sleep	VERB	VBD	_	0	root	_	_
+
+# s-en-3  non-projective: "a man came who smiled"
+# The relative clause attaches to "man" (index 1) but sits after "came",
+# so arc (1 -> 4) crosses arc (2 -> 1). Used to test is_projective().
+# sent_id = s-en-3
+# text = a man came who smiled
+1	a	a	DET	DT	_	2	det	_	_
+2	man	man	NOUN	NN	_	3	nsubj	_	_
+3	came	come	VERB	VBD	_	0	root	_	_
+4	who	who	PRON	WP	_	5	nsubj	_	_
+5	smiled	smile	VERB	VBD	_	2	acl:relcl	_	_
+
+# s-en-4  contains an EMPTY NODE (5.1) from an elided verb.
+# After dropping 5.1 there are 5 real tokens; heads must still resolve.
+# sent_id = s-en-4
+# text = Mary ate rice and John beans
+1	Mary	Mary	PROPN	NNP	_	2	nsubj	_	_
+2	ate	eat	VERB	VBD	_	0	root	_	_
+3	rice	rice	NOUN	NN	_	2	obj	_	_
+4	and	and	CCONJ	CC	_	5	cc	_	_
+5	John	John	PROPN	NNP	_	2	conj	_	_
+5.1	ate	eat	VERB	VBD	_	_	_	_	_
+6	beans	bean	NOUN	NN	_	5	orphan	_	_
+
+# --- Spanish (multiword tokens: "del" = de + el, "al" = a + el) ---------------
+# HAND-VERIFIED  s-es-1  "vi al perro del vecino"
+# CoNLL-U has MWT ranges 2-3 (al) and 5-6 (del) which MUST be dropped.
+# Real tokens 0-based: 0 vi, 1 a, 2 el, 3 perro, 4 de, 5 el, 6 vecino
+# heads:  0->ROOT, 1->3, 2->3, 3->0, 4->6, 5->6, 6->3
+# word_dl: |3-1|=2, |3-2|=1, |0-3|=3, |6-4|=2, |6-5|=1, |3-6|=3   -> sum 12
+# is_head (global): {0 (heads 3), 3 (heads 1,2,6), 6 (heads 4,5)}
+# head_dl:
+#   (3,1) span(1,3) inside {2}: no    -> 0
+#   (3,2) span(2,3) inside {}         -> 0
+#   (0,3) span(0,3) inside {1,2}: no  -> 0
+#   (6,4) span(4,6) inside {5}: no    -> 0
+#   (6,5) span(5,6) inside {}         -> 0
+#   (3,6) span(3,6) inside {4,5}: no  -> 0
+# head_dl sum = 0
+# sent_id = s-es-1
+# text = vi al perro del vecino
+1	vi	ver	VERB	_	_	0	root	_	_
+2-3	al	_	_	_	_	_	_	_	_
+2	a	a	ADP	_	_	4	case	_	_
+3	el	el	DET	_	_	4	det	_	_
+4	perro	perro	NOUN	_	_	1	obj	_	_
+5-6	del	_	_	_	_	_	_	_	_
+5	de	de	ADP	_	_	7	case	_	_
+6	el	el	DET	_	_	7	det	_	_
+7	vecino	vecino	NOUN	_	_	4	nmod	_	_
+
+# s-es-2  longer, with an MWT range, to give the bootstrap something to chew on
+# sent_id = s-es-2
+# text = el nino del pueblo leyo un libro nuevo
+1	el	el	DET	_	_	2	det	_	_
+2	nino	nino	NOUN	_	_	6	nsubj	_	_
+3-4	del	_	_	_	_	_	_	_	_
+3	de	de	ADP	_	_	5	case	_	_
+4	el	el	DET	_	_	5	det	_	_
+5	pueblo	pueblo	NOUN	_	_	2	nmod	_	_
+6	leyo	leer	VERB	_	_	0	root	_	_
+7	un	uno	DET	_	_	8	det	_	_
+8	libro	libro	NOUN	_	_	6	obj	_	_
+9	nuevo	nuevo	ADJ	_	_	8	amod	_	_
+
+# --- Japanese (head-final; a useful contrast for the head-count metric) -------
+# HAND-VERIFIED  s-ja-1
+# 0-based: 0 inu, 1 ga, 2 neko, 3 wo, 4 oikaketa
+# heads:   0->4, 1->0, 2->4, 3->2, 4->ROOT
+# word_dl: |4-0|=4, |0-1|=1, |4-2|=2, |2-3|=1          -> sum 8
+# is_head (global): {0 (heads 1), 2 (heads 3), 4 (heads 0,2)}
+# head_dl:
+#   (4,0) span(0,4) inside {1,2,3}: 2 is a head        -> 1
+#   (0,1) span(0,1) inside {}                          -> 0
+#   (4,2) span(2,4) inside {3}: no                     -> 0
+#   (2,3) span(2,3) inside {}                          -> 0
+# head_dl sum = 1
+# sent_id = s-ja-1
+# text = inu ga neko wo oikaketa
+1	inu	inu	NOUN	_	_	5	nsubj	_	_
+2	ga	ga	ADP	_	_	1	case	_	_
+3	neko	neko	NOUN	_	_	5	obj	_	_
+4	wo	wo	ADP	_	_	3	case	_	_
+5	oikaketa	oikakeru	VERB	_	_	0	root	_	_
+
+# s-ja-2  deeper head-final nesting
+# sent_id = s-ja-2
+# text = watashi wa atarashii hon wo yonda
+1	watashi	watashi	PRON	_	_	6	nsubj	_	_
+2	wa	wa	ADP	_	_	1	case	_	_
+3	atarashii	atarashii	ADJ	_	_	4	amod	_	_
+4	hon	hon	NOUN	_	_	6	obj	_	_
+5	wo	wo	ADP	_	_	4	case	_	_
+6	yonda	yomu	VERB	_	_	0	root	_	_
+
+# s-ja-3
+# sent_id = s-ja-3
+# text = kare wa gakkou ni itta
+1	kare	kare	PRON	_	_	5	nsubj	_	_
+2	wa	wa	ADP	_	_	1	case	_	_
+3	gakkou	gakkou	NOUN	_	_	5	obl	_	_
+4	ni	ni	ADP	_	_	3	case	_	_
+5	itta	iku	VERB	_	_	0	root	_	_
+
+# --- Sentences that MUST be rejected by validate() ----------------------------
+
+# REJECT: no root at all -- every token points at another token.
+# sent_id = s-bad-noroot
+1	a	a	DET	_	_	2	det	_	_
+2	b	b	NOUN	_	_	3	nsubj	_	_
+3	c	c	VERB	_	_	2	ccomp	_	_
+
+# REJECT: cycle. Token 1 is a legitimate root, but tokens 3 and 4 point at each
+# other, forming a component detached from the root. This has exactly ONE root,
+# so it gets past the root checks and must be caught by cycle detection itself.
+# sent_id = s-bad-cycle
+1	a	a	VERB	_	_	0	root	_	_
+2	b	b	NOUN	_	_	1	nsubj	_	_
+3	c	c	NOUN	_	_	4	nmod	_	_
+4	d	d	NOUN	_	_	3	nmod	_	_
+
+# REJECT: two roots
+# sent_id = s-bad-two-roots
+1	a	a	DET	_	_	0	root	_	_
+2	b	b	NOUN	_	_	0	root	_	_
+3	c	c	VERB	_	_	1	dep	_	_
+
+# REJECT: head index out of range (points at token 9 in a 3-token sentence)
+# sent_id = s-bad-range
+1	a	a	DET	_	_	9	det	_	_
+2	b	b	NOUN	_	_	3	nsubj	_	_
+3	c	c	VERB	_	_	0	root	_	_
+
+# REJECT: too short (< min_tokens = 3)
+# sent_id = s-bad-short
+1	hi	hi	INTJ	_	_	0	root	_	_
+
+# --- More well-formed sentences, so per-treebank statistics have enough data --
+# sent_id = s-en-5
+# text = the small child quickly read a long book today
+1	the	the	DET	_	_	3	det	_	_
+2	small	small	ADJ	_	_	3	amod	_	_
+3	child	child	NOUN	_	_	5	nsubj	_	_
+4	quickly	quickly	ADV	_	_	5	advmod	_	_
+5	read	read	VERB	_	_	0	root	_	_
+6	a	a	DET	_	_	8	det	_	_
+7	long	long	ADJ	_	_	8	amod	_	_
+8	book	book	NOUN	_	_	5	obj	_	_
+9	today	today	NOUN	_	_	5	obl	_	_
+
+# sent_id = s-en-6
+# text = she gave him a very expensive gift yesterday
+1	she	she	PRON	_	_	2	nsubj	_	_
+2	gave	give	VERB	_	_	0	root	_	_
+3	him	he	PRON	_	_	2	iobj	_	_
+4	a	a	DET	_	_	7	det	_	_
+5	very	very	ADV	_	_	6	advmod	_	_
+6	expensive	expensive	ADJ	_	_	7	amod	_	_
+7	gift	gift	NOUN	_	_	2	obj	_	_
+8	yesterday	yesterday	NOUN	_	_	2	obl	_	_
+
+# sent_id = s-en-7
+# text = the book that he wrote became famous
+1	the	the	DET	_	_	2	det	_	_
+2	book	book	NOUN	_	_	6	nsubj	_	_
+3	that	that	PRON	_	_	5	obj	_	_
+4	he	he	PRON	_	_	5	nsubj	_	_
+5	wrote	write	VERB	_	_	2	acl:relcl	_	_
+6	became	become	VERB	_	_	0	root	_	_
+7	famous	famous	ADJ	_	_	6	xcomp	_	_
+
+# sent_id = s-en-8
+# text = john believes that mary likes cats
+1	john	John	PROPN	_	_	2	nsubj	_	_
+2	believes	believe	VERB	_	_	0	root	_	_
+3	that	that	SCONJ	_	_	5	mark	_	_
+4	mary	Mary	PROPN	_	_	5	nsubj	_	_
+5	likes	like	VERB	_	_	2	ccomp	_	_
+6	cats	cat	NOUN	_	_	5	obj	_	_
+
+# sent_id = s-en-9
+# text = we walked slowly through the quiet old forest
+1	we	we	PRON	_	_	2	nsubj	_	_
+2	walked	walk	VERB	_	_	0	root	_	_
+3	slowly	slowly	ADV	_	_	2	advmod	_	_
+4	through	through	ADP	_	_	8	case	_	_
+5	the	the	DET	_	_	8	det	_	_
+6	quiet	quiet	ADJ	_	_	8	amod	_	_
+7	old	old	ADJ	_	_	8	amod	_	_
+8	forest	forest	NOUN	_	_	2	obl	_	_
+
+# sent_id = s-en-10
+# text = the teacher gave the students a difficult test
+1	the	the	DET	_	_	2	det	_	_
+2	teacher	teacher	NOUN	_	_	3	nsubj	_	_
+3	gave	give	VERB	_	_	0	root	_	_
+4	the	the	DET	_	_	5	det	_	_
+5	students	student	NOUN	_	_	3	iobj	_	_
+6	a	a	DET	_	_	8	det	_	_
+7	difficult	difficult	ADJ	_	_	8	amod	_	_
+8	test	test	NOUN	_	_	3	obj	_	_
+
+# sent_id = s-es-3
+# text = la casa grande esta cerca del rio
+1	la	el	DET	_	_	2	det	_	_
+2	casa	casa	NOUN	_	_	4	nsubj	_	_
+3	grande	grande	ADJ	_	_	2	amod	_	_
+4	esta	estar	VERB	_	_	0	root	_	_
+5	cerca	cerca	ADV	_	_	4	advmod	_	_
+6-7	del	_	_	_	_	_	_	_	_
+6	de	de	ADP	_	_	8	case	_	_
+7	el	el	DET	_	_	8	det	_	_
+8	rio	rio	NOUN	_	_	5	obl	_	_
+
+# sent_id = s-es-4
+# text = mi hermano compro un coche rojo ayer
+1	mi	mi	DET	_	_	2	det	_	_
+2	hermano	hermano	NOUN	_	_	3	nsubj	_	_
+3	compro	comprar	VERB	_	_	0	root	_	_
+4	un	uno	DET	_	_	5	det	_	_
+5	coche	coche	NOUN	_	_	3	obj	_	_
+6	rojo	rojo	ADJ	_	_	5	amod	_	_
+7	ayer	ayer	ADV	_	_	3	advmod	_	_
+
+# sent_id = s-es-5
+# text = los estudiantes leyeron los libros nuevos
+1	los	el	DET	_	_	2	det	_	_
+2	estudiantes	estudiante	NOUN	_	_	3	nsubj	_	_
+3	leyeron	leer	VERB	_	_	0	root	_	_
+4	los	el	DET	_	_	5	det	_	_
+5	libros	libro	NOUN	_	_	3	obj	_	_
+6	nuevos	nuevo	ADJ	_	_	5	amod	_	_
+
+# sent_id = s-ja-4
+# text = sensei ga gakusei ni hon wo ageta
+1	sensei	sensei	NOUN	_	_	7	nsubj	_	_
+2	ga	ga	ADP	_	_	1	case	_	_
+3	gakusei	gakusei	NOUN	_	_	7	obl	_	_
+4	ni	ni	ADP	_	_	3	case	_	_
+5	hon	hon	NOUN	_	_	7	obj	_	_
+6	wo	wo	ADP	_	_	5	case	_	_
+7	ageta	ageru	VERB	_	_	0	root	_	_
+
+# sent_id = s-ja-5
+# text = totemo takai yama wo mita
+1	totemo	totemo	ADV	_	_	2	advmod	_	_
+2	takai	takai	ADJ	_	_	3	amod	_	_
+3	yama	yama	NOUN	_	_	5	obj	_	_
+4	wo	wo	ADP	_	_	3	case	_	_
+5	mita	miru	VERB	_	_	0	root	_	_
+
+# sent_id = s-ja-6
+# text = ano hito wa nihongo wo hanasu
+1	ano	ano	DET	_	_	2	det	_	_
+2	hito	hito	NOUN	_	_	6	nsubj	_	_
+3	wa	wa	ADP	_	_	2	case	_	_
+4	nihongo	nihongo	NOUN	_	_	6	obj	_	_
+5	wo	wo	ADP	_	_	4	case	_	_
+6	hanasu	hanasu	VERB	_	_	0	root	_	_
+
+# sent_id = s-ja-7
+# text = kodomo tachi ga kouen de asonda
+1	kodomo	kodomo	NOUN	_	_	6	nsubj	_	_
+2	tachi	tachi	NOUN	_	_	1	dep	_	_
+3	ga	ga	ADP	_	_	1	case	_	_
+4	kouen	kouen	NOUN	_	_	6	obl	_	_
+5	de	de	ADP	_	_	4	case	_	_
+6	asonda	asobu	VERB	_	_	0	root	_	_
+
+# sent_id = s-en-11
+# text = a curious student asked the professor many hard questions
+1	a	a	DET	_	_	3	det	_	_
+2	curious	curious	ADJ	_	_	3	amod	_	_
+3	student	student	NOUN	_	_	4	nsubj	_	_
+4	asked	ask	VERB	_	_	0	root	_	_
+5	the	the	DET	_	_	6	det	_	_
+6	professor	professor	NOUN	_	_	4	iobj	_	_
+7	many	many	ADJ	_	_	9	amod	_	_
+8	hard	hard	ADJ	_	_	9	amod	_	_
+9	questions	question	NOUN	_	_	4	obj	_	_
+
+# sent_id = s-en-12
+# text = the old man who lived here sold his house
+1	the	the	DET	_	_	3	det	_	_
+2	old	old	ADJ	_	_	3	amod	_	_
+3	man	man	NOUN	_	_	8	nsubj	_	_
+4	who	who	PRON	_	_	5	nsubj	_	_
+5	lived	live	VERB	_	_	3	acl:relcl	_	_
+6	here	here	ADV	_	_	5	advmod	_	_
+7	his	his	PRON	_	_	8	nmod	_	_
+8	sold	sell	VERB	_	_	0	root	_	_
+9	house	house	NOUN	_	_	8	obj	_	_
+
+# sent_id = s-en-13
+# text = birds sing
+1	birds	bird	NOUN	_	_	2	nsubj	_	_
+2	sing	sing	VERB	_	_	0	root	_	_
+3	loudly	loudly	ADV	_	_	2	advmod	_	_
+
+# sent_id = s-es-6
+# text = ella escribio una carta larga a su madre
+1	ella	ella	PRON	_	_	2	nsubj	_	_
+2	escribio	escribir	VERB	_	_	0	root	_	_
+3	una	uno	DET	_	_	4	det	_	_
+4	carta	carta	NOUN	_	_	2	obj	_	_
+5	larga	largo	ADJ	_	_	4	amod	_	_
+6	a	a	ADP	_	_	8	case	_	_
+7	su	su	DET	_	_	8	det	_	_
+8	madre	madre	NOUN	_	_	2	obl	_	_
+
+# sent_id = s-es-7
+# text = el perro pequeno corrio por el parque
+1	el	el	DET	_	_	2	det	_	_
+2	perro	perro	NOUN	_	_	4	nsubj	_	_
+3	pequeno	pequeno	ADJ	_	_	2	amod	_	_
+4	corrio	correr	VERB	_	_	0	root	_	_
+5	por	por	ADP	_	_	7	case	_	_
+6	el	el	DET	_	_	7	det	_	_
+7	parque	parque	NOUN	_	_	4	obl	_	_
+
+# sent_id = s-ja-8
+# text = watashi wa maiasa coffee wo nomu
+1	watashi	watashi	PRON	_	_	6	nsubj	_	_
+2	wa	wa	ADP	_	_	1	case	_	_
+3	maiasa	maiasa	NOUN	_	_	6	obl	_	_
+4	coffee	coffee	NOUN	_	_	6	obj	_	_
+5	wo	wo	ADP	_	_	4	case	_	_
+6	nomu	nomu	VERB	_	_	0	root	_	_
+
+# sent_id = s-ja-9
+# text = sono chiisai inu ga hashitta
+1	sono	sono	DET	_	_	3	det	_	_
+2	chiisai	chiisai	ADJ	_	_	3	amod	_	_
+3	inu	inu	NOUN	_	_	5	nsubj	_	_
+4	ga	ga	ADP	_	_	3	case	_	_
+5	hashitta	hashiru	VERB	_	_	0	root	_	_
+
+# sent_id = s-en-14
+# text = after the rain stopped we went outside
+1	after	after	SCONJ	_	_	4	mark	_	_
+2	the	the	DET	_	_	3	det	_	_
+3	rain	rain	NOUN	_	_	4	nsubj	_	_
+4	stopped	stop	VERB	_	_	6	advcl	_	_
+5	we	we	PRON	_	_	6	nsubj	_	_
+6	went	go	VERB	_	_	0	root	_	_
+7	outside	outside	ADV	_	_	6	advmod	_	_
+
+# sent_id = s-en-15
+# text = the committee approved the new proposal unanimously
+1	the	the	DET	_	_	2	det	_	_
+2	committee	committee	NOUN	_	_	3	nsubj	_	_
+3	approved	approve	VERB	_	_	0	root	_	_
+4	the	the	DET	_	_	6	det	_	_
+5	new	new	ADJ	_	_	6	amod	_	_
+6	proposal	proposal	NOUN	_	_	3	obj	_	_
+7	unanimously	unanimously	ADV	_	_	3	advmod	_	_

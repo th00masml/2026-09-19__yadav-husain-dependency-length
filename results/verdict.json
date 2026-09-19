@@ -1,0 +1,64 @@
+{
+  "run": {
+    "run_date": "2026-09-19",
+    "timestamp_utc": "2026-09-19T08:31:24.739278+00:00",
+    "mode": {
+      "fast": true,
+      "offline": true,
+      "fixture": false
+    },
+    "seed": 20260919,
+    "n_baseline_samples": 5,
+    "n_bootstrap_resamples": 500,
+    "n_treebanks_analyzed": 5,
+    "head_count_scope": "global",
+    "python": "3.10.11",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "elapsed_seconds": 270.9
+  },
+  "pre_registered_thresholds": {
+    "support_fraction": 0.7,
+    "contradict_fraction": 0.3,
+    "h3_shrinkage_min": 0.5,
+    "fdr_q": 0.05,
+    "ci_level": 0.95
+  },
+  "hypotheses": {
+    "H1": {
+      "statement": "Real sentences minimize dependency length vs. random projective linearization, on both metrics.",
+      "role": "sanity check -- failure indicates a broken pipeline, not a refuted theory",
+      "predicted_direction": "delta < 0 on both metrics",
+      "scored_on_baseline": "B1_uniform",
+      "baseline_note": "B2_arity_preserving is reported but not scored: it preserves each node's left/right dependent counts, so it often reproduces the real order exactly and cannot detect a DLM effect.",
+      "n_conditions": 5,
+      "n_supporting": 5,
+      "fraction_supporting": 1.0,
+      "verdict": "SUPPORTED",
+      "secondary_B2_n_supporting": 4,
+      "secondary_B2_n_conditions": 5
+    },
+    "H2": {
+      "statement": "The head-based metric shows a larger real-vs-random effect than the word-based metric.",
+      "predicted_direction": "|delta_head| - |delta_word| > 0",
+      "n_conditions": 10,
+      "n_supporting": 2,
+      "n_contradicting": 7,
+      "n_equivocal": 1,
+      "fraction_supporting": 0.2,
+      "median_delta_diff": -0.043890155408523784,
+      "verdict": "CONTRADICTED"
+    },
+    "H3": {
+      "statement": "Word-based dependency length is derivative of head-based dependency length.",
+      "predicted_direction": ">=50% shrinkage in |beta(word_DL)| when head_DL is added, with beta(head_DL) significant",
+      "n_conditions": 10,
+      "n_supporting": 3,
+      "fraction_supporting": 0.3,
+      "median_shrinkage": 0.23827342094914605,
+      "median_beta_word_reduced": -4.295772581917003,
+      "median_beta_word_full": -3.8526806974312473,
+      "median_beta_head_full": -1.2398118567728864,
+      "verdict": "EQUIVOCAL"
+    }
+  }
+}

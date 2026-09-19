@@ -1,0 +1,114 @@
+# ============================================================================
+# yadav-husain-dependency-length -- experiment configuration
+#
+# PRE-REGISTRATION NOTICE
+# -----------------------
+# The `thresholds` block below is pre-registered: it was written to disk BEFORE
+# any results were generated, and it must not be edited after a run has produced
+# results/verdict.json. The decision rules there are what convert this run from
+# an illustration into a test. Changing them post hoc invalidates the run.
+# ============================================================================
+
+run:
+  name: yadav-husain-dependency-length
+  seed: 20260919          # master seed; per-sentence seeds derive from this
+  max_ram_note: "treebanks are streamed one at a time; never hold all parses at once"
+
+# ---------------------------------------------------------------------------
+# Pre-registered decision rules (see README "Decision rules" section).
+# ---------------------------------------------------------------------------
+thresholds:
+  # A hypothesis is SUPPORTED if >= support_fraction of qualifying treebanks
+  # show the predicted effect with a bootstrap 95% CI excluding 0.
+  support_fraction: 0.70
+  # It is CONTRADICTED if < contradict_fraction of treebanks do.
+  # Anything in between is EQUIVOCAL -- which is a legitimate, publishable result.
+  contradict_fraction: 0.30
+  # H3: |beta(word_DL)| must shrink by at least this fraction when head_DL is
+  # added to the model, for that treebank to count as supporting H3.
+  h3_shrinkage_min: 0.50
+  # Family-wise error control across treebanks, within each hypothesis family.
+  fdr_q: 0.05
+  # Bootstrap confidence level.
+  ci_level: 0.95
+
+bootstrap:
+  n_resamples: 5000       # BCa resamples; resamples SENTENCES, not arcs
+  fast_n_resamples: 500   # used under --fast
+
+baselines:
+  n_samples: 20           # random linearizations per real sentence
+  fast_n_samples: 5
+  kinds: [B1_uniform, B2_arity_preserving]
+
+# ---------------------------------------------------------------------------
+# The contested metric. Both `scope` settings are always computed; `scope` here
+# only selects which one is the headline. The other is reported as robustness.
+# ---------------------------------------------------------------------------
+head_count:
+  scope: global           # "global" | "within_span"
+  include_endpoints: false
+
+preprocessing:
+  min_tokens: 3
+  max_tokens: 100         # long-sentence tail is noisy and dominates DL means
+  drop_multiword_tokens: true
+  drop_empty_nodes: true
+  # Flag (do not exclude) treebanks losing more than this share to validation.
+  max_rejection_rate_warn: 0.15
+
+filters:
+  min_sentences: 5000     # after validation
+  nonprojective_report_threshold: 0.20   # flag for separate reporting, not exclusion
+
+download:
+  ud_version: "2.14"
+  github_raw_template: "https://raw.githubusercontent.com/UniversalDependencies/{repo}/master/{fname}"
+  lindat_bulk_url: "https://lindat.mff.cuni.cz/repository/xmlui/bitstream/handle/11234/1-5502/ud-treebanks-v2.14.tgz"
+  timeout_seconds: 120
+  max_retries: 3
+
+# ---------------------------------------------------------------------------
+# Treebank list. `repo` is the GitHub repo name; `train` is the file to fetch.
+# `family` and `order` are metadata used for reporting, not for selection.
+# The manifest records which of these actually loaded at runtime.
+# ---------------------------------------------------------------------------
+treebanks:
+  - {id: en_ewt,      repo: UD_English-EWT,        train: en_ewt-ud-train.conllu,      family: Indo-European, order: SVO}
+  - {id: de_gsd,      repo: UD_German-GSD,         train: de_gsd-ud-train.conllu,      family: Indo-European, order: SVO}
+  - {id: fr_gsd,      repo: UD_French-GSD,         train: fr_gsd-ud-train.conllu,      family: Indo-European, order: SVO}
+  - {id: es_ancora,   repo: UD_Spanish-AnCora,     train: es_ancora-ud-train.conllu,   family: Indo-European, order: SVO}
+  - {id: ru_syntagrus, repo: UD_Russian-SynTagRus, train: ru_syntagrus-ud-train.conllu, family: Indo-European, order: SVO}
+  - {id: pl_pdb,      repo: UD_Polish-PDB,         train: pl_pdb-ud-train.conllu,      family: Indo-European, order: SVO}
+  - {id: cs_pdt,      repo: UD_Czech-PDT,          train: cs_pdt-ud-train.conllu,      family: Indo-European, order: SVO}
+  - {id: it_isdt,     repo: UD_Italian-ISDT,       train: it_isdt-ud-train.conllu,     family: Indo-European, order: SVO}
+  - {id: pt_bosque,   repo: UD_Portuguese-Bosque,  train: pt_bosque-ud-train.conllu,   family: Indo-European, order: SVO}
+  - {id: hi_hdtb,     repo: UD_Hindi-HDTB,         train: hi_hdtb-ud-train.conllu,     family: Indo-European, order: SOV}
+  - {id: fa_seraji,   repo: UD_Persian-Seraji,     train: fa_seraji-ud-train.conllu,   family: Indo-European, order: SOV}
+  - {id: el_gdt,      repo: UD_Greek-GDT,          train: el_gdt-ud-train.conllu,      family: Indo-European, order: SVO}
+  - {id: la_ittb,     repo: UD_Latin-ITTB,         train: la_ittb-ud-train.conllu,     family: Indo-European, order: SOV}
+  - {id: ga_idt,      repo: UD_Irish-IDT,          train: ga_idt-ud-train.conllu,      family: Indo-European, order: VSO}
+  - {id: lv_lvtb,     repo: UD_Latvian-LVTB,       train: lv_lvtb-ud-train.conllu,     family: Indo-European, order: SVO}
+  - {id: fi_tdt,      repo: UD_Finnish-TDT,        train: fi_tdt-ud-train.conllu,      family: Uralic,        order: SVO}
+  - {id: et_edt,      repo: UD_Estonian-EDT,       train: et_edt-ud-train.conllu,      family: Uralic,        order: SVO}
+  - {id: hu_szeged,   repo: UD_Hungarian-Szeged,   train: hu_szeged-ud-train.conllu,   family: Uralic,        order: free}
+  - {id: tr_imst,     repo: UD_Turkish-IMST,       train: tr_imst-ud-train.conllu,     family: Turkic,        order: SOV}
+  - {id: ug_udt,      repo: UD_Uyghur-UDT,         train: ug_udt-ud-train.conllu,      family: Turkic,        order: SOV}
+  - {id: ar_padt,     repo: UD_Arabic-PADT,        train: ar_padt-ud-train.conllu,     family: Afro-Asiatic,  order: VSO}
+  - {id: he_htb,      repo: UD_Hebrew-HTB,         train: he_htb-ud-train.conllu,      family: Afro-Asiatic,  order: SVO}
+  - {id: am_att,      repo: UD_Amharic-ATT,        train: am_att-ud-train.conllu,      family: Afro-Asiatic,  order: SOV}
+  - {id: zh_gsd,      repo: UD_Chinese-GSD,        train: zh_gsd-ud-train.conllu,      family: Sino-Tibetan,  order: SVO}
+  - {id: ja_gsd,      repo: UD_Japanese-GSD,       train: ja_gsd-ud-train.conllu,      family: Japonic,       order: SOV}
+  - {id: ko_kaist,    repo: UD_Korean-Kaist,       train: ko_kaist-ud-train.conllu,    family: Koreanic,      order: SOV}
+  - {id: id_gsd,      repo: UD_Indonesian-GSD,     train: id_gsd-ud-train.conllu,      family: Austronesian,  order: SVO}
+  - {id: ta_ttb,      repo: UD_Tamil-TTB,          train: ta_ttb-ud-train.conllu,      family: Dravidian,     order: SOV}
+  - {id: wo_wtb,      repo: UD_Wolof-WTB,          train: wo_wtb-ud-train.conllu,      family: Niger-Congo,   order: SVO}
+  - {id: eu_bdt,      repo: UD_Basque-BDT,         train: eu_bdt-ud-train.conllu,      family: isolate,       order: SOV}
+
+fast_treebanks: [en_ewt, ja_gsd, tr_imst, ar_padt, fi_tdt]
+
+paths:
+  raw_dir: data/raw
+  results_dir: results
+  figures_dir: results/figures
+  fixture: tests/fixtures/mini.conllu

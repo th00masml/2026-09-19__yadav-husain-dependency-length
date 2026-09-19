@@ -1,0 +1,6 @@
+treebank_id,n_seen,n_kept,rejection_rate,reject_too_long,reject_too_short,n_sentences_total,n_nonprojective,nonprojective_rate,n_analyzed,path,status
+ar_padt,6075,5809,0.0438,170.0,96,5809,488,0.08400757445343432,5321,ar_padt-ud-train.conllu,ANALYZED
+en_ewt,12544,11393,0.0918,5.0,1146,11393,285,0.025015360308961645,11108,en_ewt-ud-train.conllu,ANALYZED
+fi_tdt,12217,11875,0.028,12.0,330,11875,712,0.059957894736842106,11163,fi_tdt-ud-train.conllu,ANALYZED
+ja_gsd,7050,7034,0.0023,11.0,5,7034,37,0.005260164913278362,6997,ja_gsd-ud-train.conllu,ANALYZED
+tr_imst,3435,3384,0.0148,,51,3384,172,0.0508274231678487,3212,tr_imst-ud-train.conllu,ANALYZED

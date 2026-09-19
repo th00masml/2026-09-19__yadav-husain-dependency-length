@@ -1,0 +1,10 @@
+conllu==4.5.3
+numpy==2.2.6
+pandas==2.3.3
+scipy==1.15.3
+statsmodels==0.14.4
+matplotlib==3.9.2
+PyYAML==6.0.2
+requests==2.32.3
+tqdm==4.66.5
+pytest==8.3.3

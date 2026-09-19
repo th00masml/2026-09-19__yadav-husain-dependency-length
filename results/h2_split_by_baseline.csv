@@ -1,0 +1,3 @@
+baseline,n,rank_supports_head,magnitude_supports_head,cells_pointing_opposite,corr_rank_magnitude,median_Padv_word,median_Padv_head,median_medrel_word,median_medrel_head
+B1_uniform,26,0,26,26,0.46268294813936345,0.8608838134740942,0.7826212317485834,0.1902147619949096,0.3245939013964092
+B2_arity_preserving,26,12,18,6,0.582148571692819,0.5541462465008704,0.5620575633852216,0.0069456051712239,0.07435740514075875

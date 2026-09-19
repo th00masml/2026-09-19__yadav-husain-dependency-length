@@ -436,7 +436,17 @@ def test_8_full_pipeline_offline_emits_valid_verdict(config_with_tmp_results):
     thr = verdict["pre_registered_thresholds"]
     assert thr["support_fraction"] == 0.70
     assert thr["contradict_fraction"] == 0.30
-    assert thr["h3_shrinkage_min"] == 0.50
+    # h3_shrinkage_min was RETIRED after pre-registration: logistic
+    # coefficients are not collapsible, so the shrinkage comparison measured
+    # rescaling rather than derivativeness. It stays in config.yaml as an
+    # explicit null with the reasoning attached, rather than being deleted, so
+    # that the change is visible instead of silent. H3 is now scored on
+    # h3_alpha via a conditional logit; see src/analysis.py::run_h3.
+    assert thr["h3_shrinkage_min"] is None, (
+        "h3_shrinkage_min must stay retired; reinstating the shrinkage "
+        "criterion reintroduces a statistic that fails in both directions"
+    )
+    assert thr["h3_alpha"] == 0.05
 
     valid = {"SUPPORTED", "CONTRADICTED", "EQUIVOCAL", "INSUFFICIENT_DATA"}
     assert verdict["hypotheses"], "no hypotheses were evaluated"

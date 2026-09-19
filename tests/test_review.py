@@ -98,7 +98,8 @@ MIN_CFG = {
     "thresholds": {
         "support_fraction": 0.70,
         "contradict_fraction": 0.30,
-        "h3_shrinkage_min": 0.50,
+        "h3_shrinkage_min": None,   # retired; see config.yaml
+        "h3_alpha": 0.05,
         "fdr_q": 0.05,
         "ci_level": 0.95,
     },
@@ -146,17 +147,21 @@ def test_a_h3_survives_a_degenerate_covariate():
 
 
 def test_a2_h3_reports_coefficients_in_the_documented_positions():
-    """m.params[1] must be word_dl and m.params[2] must be head_dl.
+    """params[0] must be word_dl and params[1] must be head_dl.
 
-    run_h3 reads its coefficients POSITIONALLY out of the fitted params vector,
-    which is only correct because add_constant prepends the intercept and the
-    column order in `full_cols` is [word, head, ntokens, arity, depth]. If
-    anyone reorders full_cols, every reported beta silently shifts by one column
-    and the whole H3 result becomes wrong-but-plausible. This pins the contract.
+    run_h3 reads its coefficients POSITIONALLY out of the fitted params vector.
+    A conditional logit fits NO intercept, so index 0 is the first predictor --
+    unlike the plain-logit version this replaced, where add_constant shifted
+    everything by one. If anyone reorders full_cols or reinstates an intercept,
+    every reported beta silently shifts and H3 becomes wrong-but-plausible.
+
+    Verified against an independent formulation: conditioning on a 2-member
+    stratum with one success is algebraically identical to a no-intercept logit
+    on the within-pair DIFFERENCES, fit against an all-ones outcome. Two
+    different estimators agreeing pins the contract far better than re-running
+    the same call.
     """
     df = synthetic_pair_table(n_sent=400, seed=7)
-    # Make word_dl strongly separating and head_dl weakly so the two betas are
-    # distinguishable by magnitude, not just by position.
     out = analysis.run_h3(df, "tb", MIN_CFG)
     assert out, "fit failed"
     row = out[0]
@@ -164,16 +169,45 @@ def test_a2_h3_reports_coefficients_in_the_documented_positions():
     import statsmodels.api as sm
 
     sub = df[df["baseline_kind"].isin(["REAL", "B1_uniform"])].copy()
-    for c in ["word_dl", "head_dl", "n_tokens", "mean_arity", "tree_depth"]:
+    for c in ["word_dl", "head_dl"]:
         sd = sub[c].std()
         sub[f"z_{c}"] = 0.0 if sd == 0 else (sub[c] - sub[c].mean()) / sd
-    cols = ["z_word_dl", "z_head_dl", "z_n_tokens", "z_mean_arity", "z_tree_depth"]
-    X = sm.add_constant(sub[cols].to_numpy(dtype=np.float64), has_constant="add")
-    m = sm.Logit(sub["is_real"].to_numpy(dtype=np.float64), X).fit(disp=0, maxiter=200)
 
-    assert np.all(X[:, 0] == 1.0), "add_constant no longer prepends the intercept"
-    assert row["beta_word_full"] == pytest.approx(float(m.params[1]))
-    assert row["beta_head_full"] == pytest.approx(float(m.params[2]))
+    real = sub[sub["is_real"] == 1].set_index("sent_id").sort_index()
+    base = sub[sub["is_real"] == 0].set_index("sent_id").sort_index()
+    common = real.index.intersection(base.index)
+    d = np.column_stack([
+        (real.loc[common, "z_word_dl"] - base.loc[common, "z_word_dl"]).to_numpy(float),
+        (real.loc[common, "z_head_dl"] - base.loc[common, "z_head_dl"]).to_numpy(float),
+    ])
+    m = sm.Logit(np.ones(len(common)), d).fit(disp=0, maxiter=200)
+
+    # Two different optimizers on two different parameterizations: agreement to
+    # ~3 significant figures is convergence noise, a shifted column is not.
+    assert row["beta_word_full"] == pytest.approx(float(m.params[0]), rel=1e-2)
+    assert row["beta_head_full"] == pytest.approx(float(m.params[1]), rel=1e-2)
+
+
+def test_a2b_h3_does_not_score_on_a_shrinkage_statistic():
+    """The retired criterion must not come back.
+
+    Logistic coefficients are not collapsible, so comparing |beta(word_DL)|
+    between nested models measures rescaling rather than derivativeness -- it
+    reports large positive "shrinkage" when the two predictors are independent
+    causes, and large negative "suppression" when word_DL's true effect is
+    exactly zero. Support must rest on word_DL's own coefficient, not on a
+    between-model delta.
+    """
+    df = synthetic_pair_table(n_sent=400, seed=7)
+    out = analysis.run_h3(df, "tb", MIN_CFG)
+    assert out, "fit failed"
+    row = out[0]
+
+    assert "shrinkage" not in row, "shrinkage statistic reinstated"
+    assert row["model"] == "conditional_logit"
+    # The scoring rule is p(word) >= alpha AND p(head) < alpha.
+    expected = row["p_word_full"] >= 0.05 and row["p_head_full"] < 0.05
+    assert bool(row["supports_h3"]) is bool(expected)
 
 
 # ===========================================================================
@@ -747,3 +781,304 @@ def test_h4_venv_lives_inside_the_run_directory():
     assert (venv / "Scripts").exists() or (venv / "bin").exists(), (
         "'.venv' exists but holds no interpreter"
     )
+
+
+# ===========================================================================
+# TEST I -- H2 co-primary statistics (pre-registered for the full run)
+# ===========================================================================
+
+def test_i1_prob_advantage_splits_ties_evenly():
+    """A tie must count half to each side, not as a loss for the coarser metric.
+
+    This is the whole reason the statistic exists: Cliff's delta scores every
+    tie as non-support, which structurally penalizes head_DL because it is the
+    coarser measure.
+    """
+    assert st.prob_advantage(np.array([1., 2.]), np.array([2., 3.])) == 1.0
+    assert st.prob_advantage(np.array([2., 3.]), np.array([2., 3.])) == 0.5
+    assert st.prob_advantage(np.array([1., 4.]), np.array([2., 4.])) == 0.75
+
+
+def test_i2_prob_advantage_is_paired_delta_rescaled_not_independent_evidence():
+    """P(advantage) == (1 - delta) / 2 EXACTLY, ties included.
+
+    This pins a NEGATIVE result. P(advantage) was pre-registered as a
+    tie-immune co-primary on the theory that splitting ties would rescue the
+    coarser metric from delta's tie penalty. That theory is false: delta
+    already splits ties, because a tie contributes to neither `pos` nor `neg`,
+    which is arithmetically identical to contributing half to each.
+
+        delta  = (pos - neg) / n,  pos + neg + ties = n
+        P(adv) = (neg + ties/2) / n = (1 - delta) / 2
+
+    The full run confirmed it empirically: corr = 1.0 at ratio exactly 0.5
+    across all 34 cells. If anyone ever reports P(advantage) as independent
+    support alongside delta, this test is the reason they must not.
+    """
+    rng = np.random.default_rng(0)
+    for coarsen in (1.0, 0.2, 0.05):
+        real = rng.normal(10, 3, 2000)
+        base = np.round((real + rng.normal(1.5, 2, 2000)) * coarsen) / max(coarsen, 1e-9)
+        delta = st.paired_cliffs_delta(real, base)
+        assert st.prob_advantage(real, base) == pytest.approx((1 - delta) / 2, abs=1e-12)
+
+    # And the tie-immunity claim it was built on is false: coarsening hurts both.
+    fine = rng.normal(10, 3, 20000)
+    fine_base = fine + rng.normal(1.5, 1, 20000)
+    coarse, coarse_base = np.round(fine / 4) * 4, np.round(fine_base / 4) * 4
+    assert np.mean(coarse == coarse_base) > 0.4, "coarsening produced no ties"
+    lost_delta = abs(st.paired_cliffs_delta(fine, fine_base)) - abs(
+        st.paired_cliffs_delta(coarse, coarse_base))
+    lost_padv = st.prob_advantage(fine, fine_base) - st.prob_advantage(coarse, coarse_base)
+    assert lost_padv == pytest.approx(lost_delta / 2, rel=1e-9)
+
+
+def test_i3_median_relative_reduction_is_not_dominated_by_long_sentences():
+    """A ratio of sums is a corpus-total effect; the median gives one vote each."""
+    real = np.array([9., 90.])
+    base = np.array([10., 200.])
+    ratio_of_sums = (base.sum() - real.sum()) / base.sum()
+    assert st.median_relative_reduction(real, base) == pytest.approx(0.325)
+    assert ratio_of_sums > 0.5  # the long sentence would otherwise dominate
+
+
+def test_i4_coprimaries_are_preregistered_in_config():
+    """The co-primaries must be declared in config.yaml, not chosen at analysis time.
+
+    config.yaml is the pre-registration record and verdict.json echoes it back;
+    adding a statistic in code without declaring it here would defeat that.
+    """
+    import yaml
+
+    cfg = yaml.safe_load((RUN_DIR / "config.yaml").read_text(encoding="utf-8"))
+    declared = cfg["thresholds"]["h2_coprimaries"]
+    assert declared == ["prob_advantage", "median_rel_reduction"]
+
+
+def test_i5_coprimary_bootstrap_uses_one_index_set_for_both_metrics():
+    """The paired-bootstrap trap, for the co-primaries this time.
+
+    Resampling the two metrics independently discards their correlation and
+    inflates the CI on their difference. With four IDENTICAL inputs the head
+    minus word contrast is exactly zero on every replicate, so a correctly
+    paired bootstrap returns a degenerate CI at zero. An independently
+    resampled one would not.
+    """
+    rng = np.random.default_rng(4)
+    real = rng.normal(10, 2, 400)
+    base = real + rng.normal(1, 1, 400)
+
+    out = st.paired_h2_costatistics_ci(
+        real_word=real, base_word=base, real_head=real, base_head=base,
+        n_resamples=200, rng=rng,
+    )
+    assert out["prob_adv_diff"] == pytest.approx(0.0, abs=1e-12)
+    assert out["med_rel_diff"] == pytest.approx(0.0, abs=1e-12)
+    assert out["prob_adv_ci_lo"] == pytest.approx(0.0, abs=1e-12)
+    assert out["prob_adv_ci_hi"] == pytest.approx(0.0, abs=1e-12)
+
+
+# ===========================================================================
+# TEST J -- multi-shard treebanks (three 404s in the first full run)
+# ===========================================================================
+
+def test_j1_multipart_specs_are_wellformed():
+    """Treebanks that ship split train files must declare `train_parts`.
+
+    DEFECT: the first full run lost ru_syntagrus and cs_pdt to HTTP 404 because
+    the config assumed a single `<id>-ud-train.conllu` per treebank. UD splits
+    anything too large for one download, and PDT was additionally renamed to
+    PDT-C upstream. Both failures were logged as warnings and the run continued,
+    so two of the largest treebanks in the sample vanished without appearing in
+    the manifest as rejected.
+    """
+    import yaml
+
+    cfg = yaml.safe_load((RUN_DIR / "config.yaml").read_text(encoding="utf-8"))
+    by_id = {t["id"]: t for t in cfg["treebanks"]}
+
+    for tid in ("ru_syntagrus", "cs_pdt"):
+        assert tid in by_id, f"{tid} missing from config"
+        parts = by_id[tid].get("train_parts")
+        assert parts, f"{tid} must declare train_parts"
+        assert len(parts) >= 2, f"{tid} train_parts should list several shards"
+        assert all(p.endswith(".conllu") for p in parts)
+
+    # am_att is test-only upstream; using it would mix a test split into a
+    # training-data analysis, so it must stay out of the active list.
+    assert "am_att" not in by_id, "am_att has no train file upstream"
+
+
+def test_j2_multipart_fetch_concatenates_and_separates_shards(tmp_path):
+    """Shards must be joined with a blank line between them.
+
+    CoNLL-U is blank-line delimited. Concatenating shards without a separator
+    would glue the last sentence of one file to the first of the next, creating
+    one malformed block per join -- a silent, low-rate corruption that a
+    sentence count would not reveal.
+    """
+    from src import ud_download as ud
+
+    block = "# sent_id = x\n1\tA\t_\tX\t_\t_\t0\troot\t_\t_\n"
+    shards = {"p1.conllu": block, "p2.conllu": block}
+
+    class FakeResp:
+        status_code = 200
+
+        def __init__(self, text):
+            self._text = text.encode("utf-8")
+
+        def iter_content(self, chunk_size=0):
+            yield self._text
+
+    def fake_get(url, timeout=0, stream=False):
+        return FakeResp(shards[url.rsplit("/", 1)[-1]])
+
+    dest = tmp_path / "merged.conllu"
+    spec = {"id": "tb", "repo": "R", "train": "merged.conllu",
+            "train_parts": list(shards)}
+    cfg_dl = {"github_raw_template": "https://x/{repo}/{fname}"}
+
+    import requests
+    orig = requests.get
+    requests.get = fake_get
+    try:
+        out = ud._fetch_multipart(spec, dest, cfg_dl)
+    finally:
+        requests.get = orig
+
+    assert out == dest and dest.exists()
+    text = dest.read_text(encoding="utf-8")
+    assert text.count("# sent_id") == 2, "both shards must be present"
+    # The join must not run the two blocks together.
+    assert "root\t_\t_\n# sent_id" not in text, "shards concatenated without separator"
+
+
+def test_j3_multipart_fetch_is_all_or_nothing(tmp_path):
+    """A missing shard must abandon the treebank, not write a partial file.
+
+    A treebank silently short a third of its sentences is worse than an absent
+    one: only the absence shows up in the manifest.
+    """
+    from src import ud_download as ud
+
+    class Resp404:
+        status_code = 404
+
+        def iter_content(self, chunk_size=0):
+            yield b""
+
+    dest = tmp_path / "merged.conllu"
+    spec = {"id": "tb", "repo": "R", "train": "merged.conllu",
+            "train_parts": ["a.conllu", "b.conllu"]}
+
+    import requests
+    orig = requests.get
+    requests.get = lambda url, timeout=0, stream=False: Resp404()
+    try:
+        out = ud._fetch_multipart(spec, dest, {"github_raw_template": "https://x/{repo}/{fname}",
+                                               "max_retries": 1})
+    finally:
+        requests.get = orig
+
+    assert out is None
+    assert not dest.exists(), "a failed multipart fetch must leave no file behind"
+    assert not dest.with_suffix(dest.suffix + ".part").exists(), "temp file leaked"
+
+
+# ===========================================================================
+# TEST K -- the tunable-difficulty baseline used by the ceiling experiment
+# ===========================================================================
+
+def test_k1_lambda_zero_is_exactly_b1_uniform():
+    """lam=0 must reproduce B1_uniform, sample for sample.
+
+    The ceiling sweep's whole point is that only DIFFICULTY varies along the
+    sweep. If lam=0 were merely similar to B1 rather than identical, the sweep
+    would not connect to the pre-registered baseline it is meant to explain.
+    """
+    for sent in itertools.islice(all_valid_trees(6), 60):
+        b1 = lin.sample_baselines(sent, "B1_uniform", 3, master_seed=11)
+        l0 = lin.sample_baselines(sent, "Lam_0.0", 3, master_seed=11)
+        for a, b in zip(b1, l0):
+            assert np.array_equal(a.heads, b.heads)
+            assert a.tokens == b.tokens
+
+
+def test_k2_lambda_one_reproduces_the_real_order_for_projective_trees():
+    """lam=1 must be the identity on projective sentences.
+
+    The linearizer only emits projective orders, so a non-projective original
+    is unreachable by construction -- those are excluded from the headline
+    analysis anyway. On the analyzed population the identity must be exact, or
+    the high-lambda end of the sweep is not "the real sentence".
+    """
+    checked = 0
+    for sent in itertools.islice(all_valid_trees(6), 120):
+        if not is_projective(sent):
+            continue
+        out = lin.sample_baselines(sent, "Lam_1.0", 2, master_seed=5)
+        for s in out:
+            assert np.array_equal(s.heads, sent.heads), sent.sent_id
+        checked += 1
+    assert checked > 20, "not enough projective trees exercised"
+
+
+def test_k3_lambda_difficulty_is_monotone():
+    """Mean word_DL must fall monotonically as lambda rises, on REAL sentences.
+
+    This is the sweep's x-axis. If difficulty were not monotone in lambda, a
+    trend across the sweep would not be a trend in difficulty and the ceiling
+    argument would not follow.
+
+    Deliberately run on the bundled fixture rather than on exhaustively
+    enumerated trees. `all_valid_trees` includes trees whose attested order is
+    already dependency-length-maximal, so interpolating toward "real" there can
+    make DL go UP -- monotonicity is a property of DLM-obeying language, which
+    is what the sweep is actually applied to, not of arbitrary trees.
+    """
+    gen, _ = ud_loader.load_treebank(FIXTURE, "fix", min_tokens=3, max_tokens=100)
+    sents = [s for s in gen if is_projective(s)]
+    assert len(sents) > 10, f"only {len(sents)} projective fixture sentences"
+
+    means = []
+    for lam in (0.0, 0.25, 0.5, 0.75, 1.0):
+        vals = []
+        for s in sents:
+            for b in lin.sample_baselines(s, f"Lam_{lam}", 2, master_seed=3):
+                vals.append(mx.sentence_metrics(b, scope="global",
+                                                include_endpoints=False)["word_dl_sum"])
+        means.append(float(np.mean(vals)))
+
+    # The fixture is 30 sentences, so single steps carry visible sampling
+    # noise; a step is only a violation if it rises by more than a small
+    # fraction of the total drop. The trend itself must be unambiguous.
+    total_drop = means[0] - means[-1]
+    assert total_drop > 0.5, f"lambda barely affected difficulty: {means}"
+    tol = 0.1 * total_drop
+    assert all(b <= a + tol for a, b in zip(means, means[1:])), (
+        f"word_DL not monotone decreasing in lambda: {means}")
+
+
+def test_k4_lambda_baseline_preserves_the_tree():
+    """A relinearization must reorder tokens, never rewire the tree.
+
+    Same invariant the B1/B2 linearizers are held to. A baseline that quietly
+    changed the arc multiset would make every DL comparison meaningless.
+    """
+    for sent in itertools.islice(all_valid_trees(6), 40):
+        for lam in ("Lam_0.3", "Lam_0.7"):
+            for b in lin.sample_baselines(sent, lam, 2, master_seed=9):
+                assert lin.arc_signature(b) == lin.arc_signature(sent)
+                assert is_projective(b), "linearizer emitted a non-projective order"
+
+
+def test_k5_unknown_baseline_kind_still_raises():
+    """The Lam_ prefix must not turn typos into silently valid baselines."""
+    sent = mk([-1, 0, 0])
+    with pytest.raises(ValueError):
+        lin.sample_baselines(sent, "B3_nonexistent", 1, master_seed=1)
+    with pytest.raises(ValueError):
+        lin.make_order_lambda_interpolated(sent, 1.5)
+    with pytest.raises(ValueError):
+        lin.make_order_lambda_interpolated(sent, -0.1)

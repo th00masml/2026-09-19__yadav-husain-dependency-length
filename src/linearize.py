@@ -145,17 +145,64 @@ def linearize(sent: Sentence, order_fn: OrderFn, rng: np.random.Generator) -> Se
     return sent.with_order(new_positions)
 
 
+def make_order_lambda_interpolated(sent: Sentence, lam: float) -> OrderFn:
+    """A baseline of TUNABLE difficulty: keep the real local order w.p. `lam`.
+
+    At every node independently, the real arrangement of {head, subtree blocks}
+    is kept with probability `lam` and replaced by a uniform shuffle otherwise.
+    So `lam = 0` reproduces B1_uniform exactly and `lam = 1` reproduces the real
+    sentence exactly, with a continuum in between.
+
+    This exists to turn a correlational claim into a controlled one. The run
+    found that rank and magnitude effect measures disagree completely against
+    the weak B1 baseline and barely at all against the strong B2 baseline, and
+    attributed that to a CEILING EFFECT: when a baseline is easy to beat, a rank
+    statistic saturates near its maximum and can no longer separate two metrics,
+    while a magnitude statistic still has room to move. Comparing two fixed
+    baselines cannot establish that, because B1 and B2 differ in more than
+    difficulty -- B2 also preserves branching direction.
+
+    Sweeping `lam` holds the construction fixed and varies ONLY difficulty, so
+    if the divergence tracks `lam` monotonically the ceiling account is
+    demonstrated rather than merely consistent with the data.
+
+    Interpolating per node rather than per sentence matters: mixing whole
+    sentences would produce a bimodal mixture of "real" and "fully scrambled"
+    items, whose rank statistic is an average of two extremes rather than a
+    genuinely intermediate difficulty.
+    """
+    if not 0.0 <= lam <= 1.0:
+        raise ValueError(f"lam must be in [0, 1], got {lam}")
+
+    def order_fn(node: int, children: Sequence[int], rng: np.random.Generator) -> list:
+        if lam > 0.0 and rng.random() < lam:
+            # Real local arrangement: head and blocks in their attested order.
+            # A child block stands at the position of the child's own token.
+            units = sorted([(node, HEAD)] + [(int(c), int(c)) for c in children])
+            return [u for _, u in units]
+        return order_b1_uniform(node, children, rng)
+
+    return order_fn
+
+
 def sample_baselines(
     sent: Sentence,
     kind: str,
     n_samples: int,
     master_seed: int,
 ) -> list[Sentence]:
-    """n_samples random linearizations of `sent` under baseline `kind`."""
+    """n_samples random linearizations of `sent` under baseline `kind`.
+
+    `kind` may also be "Lam_<x>" (e.g. "Lam_0.25") to request the tunable
+    baseline described in `make_order_lambda_interpolated`. That form is used by
+    the ceiling-effect sweep, not by the pre-registered hypotheses.
+    """
     if kind == "B1_uniform":
         order_fn: OrderFn = order_b1_uniform
     elif kind == "B2_arity_preserving":
         order_fn = make_order_b2_arity_preserving(sent)
+    elif kind.startswith("Lam_"):
+        order_fn = make_order_lambda_interpolated(sent, float(kind[4:]))
     else:
         raise ValueError(f"unknown baseline kind: {kind!r}")
 

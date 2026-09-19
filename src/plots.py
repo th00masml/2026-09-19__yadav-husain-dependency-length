@@ -175,7 +175,8 @@ def h3_scatter(h3: pd.DataFrame, out_path: Path) -> None:
     ax.set_ylim(-lim, lim)
     ax.set_xlabel("$\\beta$(word_DL)  without head_DL control")
     ax.set_ylabel("$\\beta$(word_DL)  with head_DL control")
-    ax.set_title("H3: is word-based DL derivative?\ngreen = shrinkage criterion met", fontsize=10)
+    ax.set_title("H3: is word-based DL derivative?\n"
+                 "green = word_DL loses its independent effect", fontsize=10)
     ax.legend(frameon=False, fontsize=7.5, loc="best")
     fig.tight_layout()
     fig.savefig(out_path, bbox_inches="tight")

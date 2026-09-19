@@ -42,6 +42,22 @@ thresholds:
   h3_shrinkage_min: null   # retired; no longer read by src/analysis.py
   # Alpha for the per-coefficient H3 criterion.
   h3_alpha: 0.05
+  # H2 co-primary statistics, pre-registered 2026-09-19 for the full run, BEFORE
+  # it was executed. Cliff's delta remains the primary and its verdict is
+  # reported unchanged; these two are added because delta is tie-sensitive and
+  # head_DL is the coarser metric, so delta penalizes it structurally.
+  #
+  # Two, not one, and deliberately chosen to fail differently:
+  #   prob_advantage      -- ties split evenly; immune to coarseness
+  #   median_rel_reduction -- per-sentence, so not dominated by long sentences
+  # A ratio of summed DL was considered and rejected as the co-primary: it is
+  # an effect on the corpus total, not on a typical sentence.
+  #
+  # Scoring: each is scored by the same 70/30 rule on its own bootstrap CI
+  # excluding zero. They are reported separately and never pooled. Agreement
+  # between them means the H2 comparison is robust to both tie structure and
+  # length weighting; divergence is itself a reportable result.
+  h2_coprimaries: [prob_advantage, median_rel_reduction]
   # Family-wise error control across treebanks, within each hypothesis family.
   fdr_q: 0.05
   # Bootstrap confidence level.

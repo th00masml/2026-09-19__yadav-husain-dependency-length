@@ -266,6 +266,161 @@ def paired_delta_difference_ci(
 
 
 # ---------------------------------------------------------------------------
+# H2 co-primary statistics (pre-registered alongside Cliff's delta)
+# ---------------------------------------------------------------------------
+#
+# Why two more statistics. Cliff's delta counts only the SIGN of each within-pair
+# difference, so every tie is scored as non-support. head_DL is much coarser than
+# word_DL (its real-vs-baseline tie rate runs 6-12x higher on UD data), which
+# penalizes it structurally regardless of how well it tracks word order.
+#
+# The two additions were chosen to fail in DIFFERENT ways, so that agreement
+# between them would be informative:
+#
+#   * P(advantage) with ties split. Intended as a tie-immune rank measure.
+#     THE FULL RUN SHOWED THIS INTENTION WAS WRONG: P(adv) = (1 - delta)/2
+#     identically, so it is Cliff's delta rescaled and carries no independent
+#     information. See `prob_advantage` for the algebra. Retained because it was
+#     pre-registered, but not counted as separate evidence.
+#
+#   * Median per-sentence relative reduction. A ratio of SUMMED dependency
+#     length -- the obvious formulation -- is an effect on the corpus total and
+#     is dominated by long sentences. Taking the median of the per-sentence
+#     ratio gives the typical sentence one vote each.
+#
+# What survives is a RANK-vs-MAGNITUDE contrast, not a tie-structure one. On the
+# full run these diverge completely under B1: the magnitude measure favours
+# head_DL in 17/17 treebanks while the rank measures favour word_DL in 17/17.
+# head_DL wins a smaller share of pairs but wins them by proportionally more.
+# That divergence, not either verdict alone, is the H2 result.
+
+
+def prob_advantage(real: np.ndarray, base: np.ndarray) -> float:
+    """P(real < base) + 0.5 * P(real == base): "how often is real shorter?"
+
+    Lower DL is better, so values ABOVE 0.5 mean the real sentence usually wins.
+
+    IMPORTANT -- this is NOT independent of `paired_cliffs_delta`. It is that
+    statistic rescaled:
+
+        delta  = (pos - neg) / n           with pos + neg + ties = n
+        P(adv) = (neg + ties/2) / n
+               = (1 - delta) / 2           EXACTLY, ties included
+
+    The full run confirmed this empirically: corr(dP(adv), d_delta) = 1.0 at a
+    ratio of exactly 0.5 across all 34 cells. Splitting ties evenly does NOT
+    rescue the coarser metric, because delta already splits them -- a tie
+    contributes to neither `pos` nor `neg`, which is arithmetically the same as
+    contributing half to each.
+
+    It is kept because it was pre-registered and because it is the more legible
+    way to report a rank comparison, but it must not be counted as independent
+    evidence alongside delta. The contrast that carries real information is
+    `median_relative_reduction`, which is a magnitude rather than a rank.
+    """
+    real = np.asarray(real, dtype=np.float64)
+    base = np.asarray(base, dtype=np.float64)
+    if len(real) != len(base):
+        raise ValueError("prob_advantage requires equal-length arrays")
+    if len(real) == 0:
+        return float("nan")
+    return float((np.sum(real < base) + 0.5 * np.sum(real == base)) / len(real))
+
+
+def median_relative_reduction(real: np.ndarray, base: np.ndarray) -> float:
+    """Median of (base - real) / base over sentences with base > 0.
+
+    Unweighted by length, unlike a ratio of sums. Pairs whose baseline DL is
+    zero carry no proportional information and are dropped rather than being
+    counted as zero improvement.
+    """
+    real = np.asarray(real, dtype=np.float64)
+    base = np.asarray(base, dtype=np.float64)
+    if len(real) != len(base):
+        raise ValueError("median_relative_reduction requires equal-length arrays")
+    ok = base > 0
+    if not ok.any():
+        return float("nan")
+    return float(np.median((base[ok] - real[ok]) / base[ok]))
+
+
+def paired_h2_costatistics_ci(
+    real_word: np.ndarray,
+    base_word: np.ndarray,
+    real_head: np.ndarray,
+    base_head: np.ndarray,
+    n_resamples: int = 5000,
+    ci_level: float = 0.95,
+    rng: np.random.Generator | None = None,
+) -> dict:
+    """CIs on the head-minus-word contrast for both co-primary statistics.
+
+    Same pairing discipline as `paired_delta_difference_ci`: ONE set of sentence
+    indices per replicate, applied to all four arrays, so the correlation
+    between the metrics is preserved. Resampling them independently would
+    inflate both CIs.
+
+    Returns the two contrasts (head minus word; positive favours head_DL), their
+    CIs and bootstrap p-values, plus the underlying per-metric values.
+    """
+    rng = rng or np.random.default_rng(0)
+    rw = np.asarray(real_word, dtype=np.float64)
+    bw = np.asarray(base_word, dtype=np.float64)
+    rh = np.asarray(real_head, dtype=np.float64)
+    bh = np.asarray(base_head, dtype=np.float64)
+
+    n = len(rw)
+    if not (len(bw) == len(rh) == len(bh) == n):
+        raise ValueError("paired_h2_costatistics_ci requires four equal-length arrays")
+
+    def contrasts(idx: np.ndarray) -> tuple[float, float]:
+        pa = prob_advantage(rh[idx], bh[idx]) - prob_advantage(rw[idx], bw[idx])
+        mr = (median_relative_reduction(rh[idx], bh[idx])
+              - median_relative_reduction(rw[idx], bw[idx]))
+        return pa, mr
+
+    base_idx = np.arange(n)
+    pa_obs, mr_obs = contrasts(base_idx)
+
+    boot_pa = np.empty(n_resamples, dtype=np.float64)
+    boot_mr = np.empty(n_resamples, dtype=np.float64)
+    for b in range(n_resamples):
+        idx = rng.integers(0, n, size=n)          # SAME indices for both metrics
+        boot_pa[b], boot_mr[b] = contrasts(idx)
+
+    alpha = 1.0 - ci_level
+
+    def summarize(obs: float, boot: np.ndarray) -> tuple[float, float, float]:
+        boot = boot[np.isfinite(boot)]
+        if not len(boot):
+            return float("nan"), float("nan"), float("nan")
+        lo = float(np.quantile(boot, alpha / 2))
+        hi = float(np.quantile(boot, 1 - alpha / 2))
+        p = 2.0 * min(np.mean(boot <= 0), np.mean(boot >= 0))
+        return lo, hi, float(min(p, 1.0))
+
+    pa_lo, pa_hi, pa_p = summarize(pa_obs, boot_pa)
+    mr_lo, mr_hi, mr_p = summarize(mr_obs, boot_mr)
+
+    return {
+        "prob_adv_word": prob_advantage(rw, bw),
+        "prob_adv_head": prob_advantage(rh, bh),
+        "prob_adv_diff": pa_obs,
+        "prob_adv_ci_lo": pa_lo,
+        "prob_adv_ci_hi": pa_hi,
+        "prob_adv_p": pa_p,
+        "med_rel_word": median_relative_reduction(rw, bw),
+        "med_rel_head": median_relative_reduction(rh, bh),
+        "med_rel_diff": mr_obs,
+        "med_rel_ci_lo": mr_lo,
+        "med_rel_ci_hi": mr_hi,
+        "med_rel_p": mr_p,
+        "tie_rate_word": float(np.mean(rw == bw)),
+        "tie_rate_head": float(np.mean(rh == bh)),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Multiple comparisons
 # ---------------------------------------------------------------------------
 
